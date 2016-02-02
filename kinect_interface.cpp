@@ -178,8 +178,8 @@ void KinectInterface::process_frame_PDFlow(Frame* rgb, Frame* depth, cv::Mat & o
     cv::Mat(rgb->height, rgb->width, CV_8UC4, rgb->data).copyTo(rgb_mat);
     cv::Mat(depth->height, depth->width, CV_32FC1, depth->data).copyTo(depth_mat);
 
-    cv::imshow("rgb", rgb_mat);
-    cv::imshow("depth", depth_mat/ 4500.0f);
+    //cv::imshow("rgb", rgb_mat);
+    //cv::imshow("depth", depth_mat/ 4500.0f);
 
     registration->apply(rgb, depth, undistorted, registered, true, depth2rgb);
     cv::Mat(depth2rgb->height, depth2rgb->width, CV_32FC1, depth2rgb->data).copyTo(depth2rgb_mat);

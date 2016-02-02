@@ -97,7 +97,7 @@ public:
     void solveSceneFlowGPU();
     void freeGPUMemory();
     void initializeCUDA(size_t width, size_t height);
-	void showAndSaveResults();
+	void getResult(cv::Mat &result);
 
     PD_flow_opencv(unsigned int rows_config);
 

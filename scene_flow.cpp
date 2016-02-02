@@ -201,7 +201,7 @@ bool PD_flow_opencv::loadRGBDFrames(cv::Mat& i1, cv::Mat &d1, cv::Mat& i2, cv::M
 }
 
 
-void PD_flow_opencv::showAndSaveResults()
+void PD_flow_opencv::getResult(cv::Mat &result)
 {
 	//Save scene flow as an RGB image (one colour per direction)
 	cv::Mat sf_image(rows, cols, CV_8UC3);
@@ -227,12 +227,12 @@ void PD_flow_opencv::showAndSaveResults()
             sf_image.at<cv::Vec3b>(v,u)[1] = static_cast<unsigned char>(255.f*fabs(dyp[v + u*rows])/maxmody); //Green - y
             sf_image.at<cv::Vec3b>(v,u)[2] = static_cast<unsigned char>(255.f*fabs(dzp[v + u*rows])/maxmodz); //Red - z
 		}
-	
+	sf_image.copyTo(result);
 	//Show the scene flow as an RGB image	
 //	cv::namedWindow("SceneFlow", cv::WINDOW_NORMAL);
 //    cv::moveWindow("SceneFlow",width - cols/2,height - rows/2);
-	cv::imshow("SceneFlow", sf_image);
-	cv::waitKey(1);
+    //cv::imshow("SceneFlow", sf_image);
+	//cv::waitKey(1);
 
 
 //	//Save the scene flow as a text file
