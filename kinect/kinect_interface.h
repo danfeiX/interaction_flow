@@ -16,28 +16,30 @@
 #include <opencv2/opencv.hpp>
 
 enum Processor { cl, gl, cpu};
-
+bool writeMatBinary(std::ofstream& ofs, const cv::Mat& out_mat);
 
 using namespace libfreenect2;
 class KinectInterface {
 public:
-    KinectInterface(Processor backend);
     KinectInterface();
     void capture_frame();
     ~KinectInterface();
-    void start_device();
+	void start_device(Processor backend);
     void stop_device();
-    void save_buffer(std::string filename);
-    void load_buffer(std::string filename);
     void clear_buffer();
-    void process_buffer();
-    void process_frame_PDFlow(Frame*, Frame*, cv::Mat &, cv::Mat &);
-    void process_frame_PDFlow(size_t frameID, cv::Mat&, cv::Mat&);
-    size_t num_frames() {return rgb_buffer.size();}
+	void postprocess_buffer(std::string filename);
+	void process_frame_PDFlow(const Frame*, const Frame*, cv::Mat &, cv::Mat &, cv::Mat &);
+	void process_frame_PDFlow(size_t frameID, cv::Mat&, cv::Mat&, cv::Mat &);
+	void process_frame_XYZ(const cv::Mat& rectified_depth, cv::Mat& outXYZ);
+	size_t num_frames() { return rgb_frame_buffer.size(); }
+
+	//deprecated, don't use
+	void save_buffer(std::string filename);
+	void load_buffer(std::string filename);
 
 private:
-    std::vector<Frame*> rgb_buffer;
-    std::vector<Frame*> depth_buffer;
+    std::vector<Frame*> rgb_frame_buffer;
+    std::vector<Frame*> depth_frame_buffer;
 
     SyncMultiFrameListener* listener;
     Registration* registration;

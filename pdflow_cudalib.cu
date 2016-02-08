@@ -22,6 +22,8 @@
 *****************************************************************************/
 
 #include "pdflow_cudalib.h"
+#include <math.h>
+#include "device_launch_parameters.h"
 
 
 //                         Memory allocation - device
