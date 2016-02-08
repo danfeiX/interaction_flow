@@ -201,11 +201,11 @@ bool PD_flow_opencv::loadRGBDFrames(cv::Mat& i1, cv::Mat &d1, cv::Mat& i2, cv::M
 }
 
 
-void PD_flow_opencv::getResult(cv::Mat &result)
+void PD_flow_opencv::getResult(cv::Mat &flow, cv::Mat &flow_color)
 {
 	//Save scene flow as an RGB image (one colour per direction)
-	cv::Mat sf_image(rows, cols, CV_8UC3);
-
+	flow_color = cv::Mat(rows, cols, CV_32FC3);
+	flow = cv::Mat(rows, cols, CV_32FC3);
     //Compute the max values of the flow (of its components)
 	float maxmodx = 0.f, maxmody = 0.f, maxmodz = 0.f;
 	for (unsigned int v=0; v<rows; v++)
@@ -223,11 +223,15 @@ void PD_flow_opencv::getResult(cv::Mat &result)
 	for (unsigned int v=0; v<rows; v++)
 		for (unsigned int u=0; u<cols; u++)
 		{
-            sf_image.at<cv::Vec3b>(v,u)[0] = static_cast<unsigned char>(255.f*fabs(dxp[v + u*rows])/maxmodx); //Blue - x
-            sf_image.at<cv::Vec3b>(v,u)[1] = static_cast<unsigned char>(255.f*fabs(dyp[v + u*rows])/maxmody); //Green - y
-            sf_image.at<cv::Vec3b>(v,u)[2] = static_cast<unsigned char>(255.f*fabs(dzp[v + u*rows])/maxmodz); //Red - z
+			flow_color.at<cv::Vec3f>(v, u)[0] = static_cast<float>(fabs(dxp[v + u*rows]) / maxmodx); //Blue - x
+			flow_color.at<cv::Vec3f>(v, u)[1] = static_cast<float>(fabs(dyp[v + u*rows]) / maxmody); //Green - y
+			flow_color.at<cv::Vec3f>(v, u)[2] = static_cast<float>(fabs(dzp[v + u*rows]) / maxmodz); //Red - z
+			flow.at<cv::Point3f>(v, u).x = static_cast<float>(dxp[v + u*rows]);
+			flow.at<cv::Point3f>(v, u).y = static_cast<float>(dyp[v + u*rows]);
+			flow.at<cv::Point3f>(v, u).z = static_cast<float>(dzp[v + u*rows]);
+
 		}
-	sf_image.copyTo(result);
+	
 	//Show the scene flow as an RGB image	
 //	cv::namedWindow("SceneFlow", cv::WINDOW_NORMAL);
 //    cv::moveWindow("SceneFlow",width - cols/2,height - rows/2);
