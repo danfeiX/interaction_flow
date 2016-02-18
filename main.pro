@@ -36,6 +36,8 @@ Include\\CUDA \
 $(OPENCV_INCLUDE_PATH) \
 $(KINECT_INCLUDE_PATH) \
 $(FREENECT2_INCLUDE_PATH) \
+$(ARUCO_DIR)\\include \
+$(LIBREALSENSE_DIR)\\include \
 
 CONFIG(release, debug | release){
 LIBS += \
@@ -49,6 +51,8 @@ $(OPENCV_DIR)\\lib\\opencv_imgproc2410.lib \
 $(OPENCV_DIR)\\lib\\opencv_highgui2410.lib \
 $(OPENCV_DIR)\\lib\\opencv_contrib2410.lib \
 $(FREENECT2_LIB_PATH)\\freenect2.lib \
+$(ARUCO_DIR)\\lib\\aruco130.lib \
+$(LIBREALSENSE_DIR)\\bin\\x64\\realsense.lib\
 }
 else {
 LIBS += \
@@ -62,6 +66,8 @@ $(OPENCV_DIR)\\lib\\opencv_imgproc2410d.lib \
 $(OPENCV_DIR)\\lib\\opencv_highgui2410d.lib \
 $(OPENCV_DIR)\\lib\\opencv_contrib2410d.lib \
 $(FREENECT2_LIB_PATH)\\freenect2.lib \
+$(ARUCO_DIR)\\lib\\aruco130.lib \
+$(LIBREALSENSE_DIR)\\bin\\x64\\realsense.lib\
 }
 
 TARGET = Main
@@ -69,11 +75,8 @@ TARGET = Main
 RESOURCES = main.qrc
 
 HEADERS +=  \
-*.h \
-kinect\\kinect_interface.h \
+include\\*.h \
 
 SOURCES +=  \
-*.cpp \
-main.cpp \
-*.cu \
-kinect\\kinect_interface.cpp \
+src\\*.cpp \
+src\\*.cu \

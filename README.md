@@ -2,6 +2,6 @@
 Interaction modeling using PD-flow with Kinect v2
 
 Dependencies:
-- libFrennect2
-- OpenCV
+- libFreenect2
+- OpenCV (2.4)
 - CUDA (for computing RGB-D flow)

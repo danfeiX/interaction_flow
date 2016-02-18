@@ -10,36 +10,49 @@
 #include <libfreenect2/packet_pipeline.h>
 #include <libfreenect2/logger.h>
 #include <opencv2/core/core.hpp>
+#include <opencv2/opencv.hpp>
 #include <vector>
 #include <string>
 #include <fstream>
-#include <opencv2/opencv.hpp>
+#include "ARScene.h"
+#include "device_interface.h"
+#define BOUND_MIN_X -1
+#define BOUND_MIN_Y -1
+#define BOUND_MIN_Z 0
+#define BOUND_MAX_X 1
+#define BOUND_MAX_Y 0.75
+#define BOUND_MAX_Z 1.5
 
-enum Processor { cl, gl, cpu};
-bool writeMatBinary(std::ofstream& ofs, const cv::Mat& out_mat);
 
 using namespace libfreenect2;
-class KinectInterface {
+class KinectInterface : public DeviceInterface{
 public:
-    KinectInterface();
-    void capture_frame();
+	enum Processor { cl, gl, cpu };
+	KinectInterface(const size_t, const size_t);
+	KinectInterface() {};
     ~KinectInterface();
-	void start_device(Processor backend);
-    void stop_device();
-    void clear_buffer();
-	void postprocess_buffer(std::string filename);
-	void process_frame_PDFlow(const Frame*, const Frame*, cv::Mat &, cv::Mat &, cv::Mat &);
-	void process_frame_PDFlow(size_t frameID, cv::Mat&, cv::Mat&, cv::Mat &);
-	void process_frame_XYZ(const cv::Mat& rectified_depth, cv::Mat& outXYZ);
-	size_t num_frames() { return rgb_frame_buffer.size(); }
 
-	//deprecated, don't use
+	virtual void capture_frame(cv::Mat &, cv::Mat &, cv::Mat &, bool);
+	virtual void start_device(); //start the kinect device using LibFreenect2
+    virtual void stop_device(); //stop the device
+	virtual void clear_frame_buffer(); //clear the frame buffer
+	virtual void process_frame_buffer(std::string filename); //process the frame buffer and save images
+	virtual void init_ar(const float marker_size, const string board_fn);
+	virtual size_t num_frames();
+
+#if 0
 	void save_buffer(std::string filename);
 	void load_buffer(std::string filename);
+#endif // 0
+
 
 private:
-    std::vector<Frame*> rgb_frame_buffer;
-    std::vector<Frame*> depth_frame_buffer;
+	void register_depth(const Frame*, const Frame*, cv::Mat &, cv::Mat &); //process individual frame
+	void depth_to_xyz(const cv::Mat& rectified_depth, cv::Mat& outXYZ);
+
+	Processor backend;
+
+
 
     SyncMultiFrameListener* listener;
     Registration* registration;
@@ -48,5 +61,7 @@ private:
     Frame* depth2rgb;
     Freenect2Device *dev;
     Freenect2 freenect2;
+
+	ARScene ar;
 };
 #endif //INTERACTION_FLOW_KINECT_INTERFACE_H
