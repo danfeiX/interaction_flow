@@ -1,17 +1,16 @@
 #include "realsense_interface.h"
 #include "flow_utils.h"
+#define ALIGN_TO_COLOR 1
 
 using namespace cv;
-RealSenseInterface::RealSenseInterface(const size_t im_w, const size_t im_h)
+RealSenseInterface::RealSenseInterface(size_t w, size_t h, bool buffer, size_t device_id, rs::context *ctx) :
+DeviceInterface(w, h, buffer, device_id),
+m_ctx(ctx)
 {
-	im_width = im_w;
-	im_height = im_h;
 }
 
 RealSenseInterface::RealSenseInterface()
 {
-	im_width = 640;
-	im_height = 480;
 }
 
 
@@ -20,15 +19,15 @@ RealSenseInterface::~RealSenseInterface()
 }
 
 
-void RealSenseInterface::get_frame(cv::Mat& frame, rs::stream stream, int *timestamp)
+void RealSenseInterface::get_frame(cv::Mat& frame, const rs::stream stream, int *timestamp)
 {
-	assert(dev->is_stream_enabled(stream));
+	assert(m_dev->is_stream_enabled(stream));
 	
-	*timestamp = dev->get_frame_timestamp(stream); //get timestamp
-	const void* data = dev->get_frame_data(stream); //get data
-	int width = dev->get_stream_width(stream); //get frame width
-	int height = dev->get_stream_height(stream); //get frame height
-	rs::format format = dev->get_stream_format(stream); //get data format
+	*timestamp = m_dev->get_frame_timestamp(stream); //get timestamp
+	const void* data = m_dev->get_frame_data(stream); //get data
+	int width = m_dev->get_stream_width(stream); //get frame width
+	int height = m_dev->get_stream_height(stream); //get frame height
+	rs::format format = m_dev->get_stream_format(stream); //get data format
 	
 	Mat tmp;
 	switch (format)
@@ -60,80 +59,116 @@ void RealSenseInterface::get_frame(cv::Mat& frame, rs::stream stream, int *times
 
 }
 
-void RealSenseInterface::capture_frame(cv::Mat & rgb, cv::Mat & depth, cv::Mat & xyz, bool buffer)
+void RealSenseInterface::capture_frame()
 {
 	Mat depth_int;
 	int rgb_ts, depth_ts, xyz_ts;
+	m_dev->wait_for_frames();
 
-	dev->wait_for_frames();
-
-	//get_frame(rgb, rs::stream::rectified_color, &rgb_ts);
-	//get_frame(depth_int, rs::stream::depth_aligned_to_rectified_color, &depth_ts);
+	Mat rgb, depth, xyz;
+#ifdef ALIGN_TO_COLOR //Align depth and xyz to color image
+	get_frame(rgb, rs::stream::rectified_color, &rgb_ts);
+	get_frame(depth_int, rs::stream::depth_aligned_to_rectified_color, &depth_ts);
+	depth_int.convertTo(depth, CV_32FC1);
+	depth *= m_dev->get_depth_scale(); //convert to meter
+	depth_to_xyz(depth, xyz);
+#else //Align color to depth and xyz
 	get_frame(rgb, rs::stream::color_aligned_to_depth, &rgb_ts);
 	get_frame(depth_int, rs::stream::depth, &depth_ts);
 	get_frame(xyz, rs::stream::points, &xyz_ts);
-
 	depth_int.convertTo(depth, CV_32FC1);
 	depth *= dev->get_depth_scale(); //convert to meter
+#endif
+	m_lock.lock();
+		update(rgb, depth, xyz);
+	m_lock.unlock();
+}
 
-	if (buffer) {
-		Mat rgb_, depth_, xyz_;
-		rgb.copyTo(rgb_);
-		depth.copyTo(depth_);
-		xyz.copyTo(xyz_);
-		rgb_buffer.push_back(rgb_);
-		depth_buffer.push_back(depth_);
-		xyz_buffer.push_back(xyz_);
+//Transform color image space to depth space
+void RealSenseInterface::color_to_depth(const cv::Mat& color, cv::Mat& outDepth)
+{
+	//TODO
+	//m_extrinsics.transform()
+	rs::extrinsics extrinsics = m_dev->get_extrinsics(rs::stream::rectified_color, rs::stream::depth);
+}
+
+void RealSenseInterface::depth_to_xyz(const cv::Mat& rectified_depth, cv::Mat& outXYZ) 
+{
+	const float cx = m_intrinsics.ppx;
+	const float cy = m_intrinsics.ppy;
+	const float fx = 1 / m_intrinsics.fx;
+	const float fy = 1 / m_intrinsics.fy;
+
+	const float bad_val = std::numeric_limits<float>::quiet_NaN();
+	const cv::Point3f bad_pos(bad_val, bad_val, bad_val);
+	outXYZ = cv::Mat(rectified_depth.rows, rectified_depth.cols, CV_32FC3);
+
+	for (int r = 0; r < rectified_depth.rows; ++r) {
+		for (int c = 0; c < rectified_depth.cols; ++c) {
+			float depth_val = rectified_depth.at<float>(r, c);
+			if (isnan(depth_val) || depth_val <= 0.001)
+			{
+				//depth value is not valid
+				outXYZ.at<cv::Point3f>(r, c) = bad_pos;
+			}
+			else {
+				float x = (c + 0.5 - cx) * fx * depth_val;
+				float y = (r + 0.5 - cy) * fy * depth_val;
+				float z = depth_val;
+				outXYZ.at<cv::Point3f>(r, c) = cv::Point3f(x, y, z);
+			}
+		}
 	}
 }
 
+void RealSenseInterface::init_ar(const float marker_size, const string board_fn) {
+	rs::intrinsics c_intrinsics = m_dev->get_stream_intrinsics(rs::stream::rectified_color);
+
+	float cat_data[9] = { m_intrinsics.fx, 0, m_intrinsics.ppx, 0, m_intrinsics.fy, m_intrinsics.ppy, 0, 0, 1 };
+	float dist_data[4] = { m_intrinsics.coeffs[0], //k1
+						   m_intrinsics.coeffs[0], //k2
+						   m_intrinsics.coeffs[0], //p1
+						   m_intrinsics.coeffs[0]  //p2
+						 };
+
+	cv::Mat cam_mat = cv::Mat(3, 3, CV_32F, cat_data);
+	cv::Mat distortion = cv::Mat(4, 1, CV_32F, dist_data);
+
+	ar.init_detector(cam_mat, distortion, cv::Size(im_width, im_height), marker_size, board_fn);
+}
+
+
+
 void RealSenseInterface::start_device() 
 {
-	if (ctx.get_device_count() == 0) throw std::runtime_error("No device detected. Is it plugged in?");
+	if (m_ctx->get_device_count() == 0) throw std::runtime_error("No device detected. Is it plugged in?");
 
-	dev = ctx.get_device(0);
+	m_dev = m_ctx->get_device(m_device_id);
 
 	//enable all three streams
-	dev->enable_stream(rs::stream::depth, rs::preset::best_quality);
-	dev->enable_stream(rs::stream::color, rs::preset::best_quality);
-	try { dev->enable_stream(rs::stream::infrared2, rs::preset::best_quality); }
-	catch (...) {}
+
+	try {
+		m_dev->enable_stream(rs::stream::depth, rs::preset::best_quality);
+		m_dev->enable_stream(rs::stream::color, rs::preset::best_quality);
+		m_dev->enable_stream(rs::stream::infrared2, rs::preset::best_quality);
+	}
+	catch (rs::error e) {
+		std::cout << e.what() << endl;
+	}
+
+	m_intrinsics = m_dev->get_stream_intrinsics(rs::stream::rectified_color);
+
 
 	//start the device
-	dev->start();
+	m_dev->start();
 }
 
 void RealSenseInterface::stop_device() 
 {
-	dev->stop();
+	m_dev->stop();
 }
 
 void RealSenseInterface::clear_frame_buffer() 
-{
-
-}
-
-void RealSenseInterface::process_frame_buffer(std::string filename) 
-{
-	cout << "processing buffer..." << endl;
-	ofstream output_file(filename.c_str(), ios::binary);
-	size_t num_frame = num_frames();
-	output_file.write((char *)&num_frame, sizeof(size_t));
-
-	for (int i = 0; i < num_frames(); ++i) {
-		Mat intensity;
-		cvtColor(rgb_buffer[i], intensity, COLOR_BGR2GRAY);
-		writeMatBinary(output_file, intensity);
-		writeMatBinary(output_file, depth_buffer[i]);
-		writeMatBinary(output_file, xyz_buffer[i]);
-
-		cv::imshow("depth2rgb", depth_buffer[i]);
-		cv::imshow("intensity", xyz_buffer[i]);
-		int key = cv::waitKey(1);
-	}
-}
-
-void RealSenseInterface::init_ar(const float marker_size, const string board_fn) 
 {
 
 }

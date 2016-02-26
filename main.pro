@@ -42,14 +42,13 @@ $(LIBREALSENSE_DIR)\\include \
 CONFIG(release, debug | release){
 LIBS += \
 $(CUDA_PATH)\\lib\\$(PlatformName)\\cudart.lib \
-$(GLEW_LIB_PATH)\\glew32.lib \
-$(FREEGLUT_LIB_PATH)\\Release\\freeglut.lib \
-$(ASSIMP_LIB_PATH)\\Release\\assimp-vc120-mt.lib \
-$(KINECT_LIB_PATH)\\Kinect20.lib \
 $(OPENCV_DIR)\\lib\\opencv_core2410.lib \
 $(OPENCV_DIR)\\lib\\opencv_imgproc2410.lib \
 $(OPENCV_DIR)\\lib\\opencv_highgui2410.lib \
 $(OPENCV_DIR)\\lib\\opencv_contrib2410.lib \
+$(OPENCV_DIR)\\lib\\opencv_calib3d2410.lib \
+$(OPENCV_DIR)\\lib\\opencv_flann2410.lib \
+$(OPENCV_DIR)\\lib\\opencv_gpu2410.lib \
 $(FREENECT2_LIB_PATH)\\freenect2.lib \
 $(ARUCO_DIR)\\lib\\aruco130.lib \
 $(LIBREALSENSE_DIR)\\bin\\x64\\realsense.lib\
@@ -57,14 +56,13 @@ $(LIBREALSENSE_DIR)\\bin\\x64\\realsense.lib\
 else {
 LIBS += \
 $(CUDA_PATH)\\lib\\$(PlatformName)\\cudart.lib \
-$(GLEW_LIB_PATH)\\glew32.lib \
-$(FREEGLUT_LIB_PATH)\\Debug\\freeglutd.lib \
-$(ASSIMP_LIB_PATH)\\Debug\\assimp-vc120-mtd.lib \
-$(KINECT_LIB_PATH)\\Kinect20.lib \
 $(OPENCV_DIR)\\lib\\opencv_core2410d.lib \
 $(OPENCV_DIR)\\lib\\opencv_imgproc2410d.lib \
 $(OPENCV_DIR)\\lib\\opencv_highgui2410d.lib \
 $(OPENCV_DIR)\\lib\\opencv_contrib2410d.lib \
+$(OPENCV_DIR)\\lib\\opencv_calib3d2410d.lib \
+$(OPENCV_DIR)\\lib\\opencv_flann2410d.lib \
+$(OPENCV_DIR)\\lib\\opencv_gpu2410d.lib \
 $(FREENECT2_LIB_PATH)\\freenect2.lib \
 $(ARUCO_DIR)\\lib\\aruco130.lib \
 $(LIBREALSENSE_DIR)\\bin\\x64\\realsense.lib\
@@ -78,5 +76,6 @@ HEADERS +=  \
 include\\*.h \
 
 SOURCES +=  \
+main.cpp \
 src\\*.cpp \
 src\\*.cu \

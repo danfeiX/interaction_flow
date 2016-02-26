@@ -8,15 +8,19 @@
 #include "flow_utils.h"
 using namespace std;
 
-KinectInterface::KinectInterface(const size_t im_w, const size_t im_h):
-backend(Processor::cl)
+KinectInterface::KinectInterface(size_t w, size_t h, bool buffer, size_t device_id) :
+backend(Processor::cl),
+DeviceInterface(w, h, buffer, device_id)
 {
-	im_width = im_w;
-	im_height = im_h;
 }
 
+KinectInterface::KinectInterface():
+backend(Processor::cl)
+{
+}
 
 void KinectInterface::start_device() {
+
 	//! [context]
 	dev = nullptr;
 	registration = nullptr;
@@ -96,6 +100,7 @@ void KinectInterface::start_device() {
     std::cout << "device serial: " << dev->getSerialNumber() << std::endl;
     std::cout << "device firmware: " << dev->getFirmwareVersion() << std::endl;
     registration = new libfreenect2::Registration(dev->getIrCameraParams(), dev->getColorCameraParams());
+	
 }
 
 void KinectInterface::stop_device() {
@@ -107,7 +112,8 @@ void KinectInterface::stop_device() {
 //1. buffer raw frames and post process the buffer later
 //2. buffer registered frames
 //3. nothing
-void KinectInterface::capture_frame(cv::Mat & rgb, cv::Mat & depth, cv::Mat & xyz, bool buffer) {
+void KinectInterface::capture_frame() {
+	Mat xyz, rgb, depth;
     libfreenect2::FrameMap frame;
     listener->waitForNewFrame(frame);
 	libfreenect2::Frame *rgb_frame = frame[libfreenect2::Frame::Color];
@@ -118,15 +124,10 @@ void KinectInterface::capture_frame(cv::Mat & rgb, cv::Mat & depth, cv::Mat & xy
 	depth_to_xyz(depth, xyz);
 	//threshPosition(depth, xyz, cv::Point3f(BOUND_MIN_X, BOUND_MIN_Y, BOUND_MIN_Z), 
 	//						   cv::Point3f(BOUND_MAX_X, BOUND_MAX_Y, BOUND_MAX_Z));
-	if (buffer) {
-		Mat rgb_, depth_, xyz_;
-		rgb.copyTo(rgb_);
-		depth.copyTo(depth_);
-		xyz.copyTo(xyz_);
-		rgb_buffer.push_back(rgb_);
-		depth_buffer.push_back(depth_);
-		xyz_buffer.push_back(xyz_);
-	}
+	m_lock.lock(); 
+		update(rgb, depth, xyz);
+	m_lock.unlock();
+
 	//ar.detect_board(intensity);
 
 }
@@ -141,11 +142,11 @@ KinectInterface::~KinectInterface() {
     delete depth2rgb;
 }
 
-void KinectInterface::init_ar(const float marker_size, const string board_fn) {
-	libfreenect2::Freenect2Device::IrCameraParams param = dev->getIrCameraParams();
+void KinectInterface::init_ar(const float marker_size /*in meter*/, const string board_fn) {
+	libfreenect2::Freenect2Device::ColorCameraParams param = dev->getColorCameraParams();
 
 	float cat_data[9] = {param.fx, 0, param.cx, 0, param.fy, param.cy, 0, 0, 1};
-	float dist_data[4] = {param.k1, param.k2, param.p1, param.p2};
+	float dist_data[4] = {0, 0, 0, 0};
 
 	cv::Mat cam_mat = cv::Mat(3, 3, CV_32F, cat_data);
 	cv::Mat distortion = cv::Mat(4, 1, CV_32F, dist_data);
@@ -197,27 +198,6 @@ void KinectInterface::depth_to_xyz(const cv::Mat& rectified_depth, cv::Mat& outX
 	}
 }
 
-//1. Converts the rgb and depth frame buffer to cv::Mat that is of
-//the input format of PD-flow.
-//2. Writes the cv::Mat to a binary file
-void KinectInterface::process_frame_buffer(std::string filename) {
-	cout << "processing buffer..." << endl;
-	ofstream output_file(filename.c_str(), ios::binary);
-	size_t num_frame = num_frames();
-	output_file.write((char *)&num_frame, sizeof(size_t));
-
-	for (int i = 0; i < num_frames(); ++i) {
-		Mat intensity;
-		writeMatBinary(output_file, rgb_buffer[i]);
-		writeMatBinary(output_file, depth_buffer[i]);
-		writeMatBinary(output_file, xyz_buffer[i]);
-
-		cv::imshow("depth2rgb", depth_buffer[i]);
-		cv::imshow("intensity", xyz_buffer[i]);
-		int key = cv::waitKey(1);
-	}
-
-}
 
 size_t KinectInterface::num_frames()
 {

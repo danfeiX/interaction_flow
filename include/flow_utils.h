@@ -13,14 +13,14 @@ bool readMatBinary(std::ifstream& ifs, cv::Mat& in_mat);
 class FPSTimer 
 {
 public:
-	FPSTimer(float freq) {
-		print_freq = freq;
+	FPSTimer(std::string t_name, float freq):name(t_name), print_freq(freq) {
 	}
+
 	void pulse() {
 		count++;
 		float sec = (clock() - start_t) / CLOCKS_PER_SEC;
 		if (sec > print_freq) {
-			cout << "FPS: " << (float)count / sec << endl;
+			cout <<name<< " FPS: " << (float)count / sec << endl;
 			start_t = clock();
 			count = 0;
 		}
@@ -29,4 +29,5 @@ private:
 	size_t count;
 	float start_t;
 	float print_freq;
+	std::string name;
 };

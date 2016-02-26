@@ -14,7 +14,6 @@
 #include <vector>
 #include <string>
 #include <fstream>
-#include "ARScene.h"
 #include "device_interface.h"
 #define BOUND_MIN_X -1
 #define BOUND_MIN_Y -1
@@ -28,15 +27,14 @@ using namespace libfreenect2;
 class KinectInterface : public DeviceInterface{
 public:
 	enum Processor { cl, gl, cpu };
-	KinectInterface(const size_t, const size_t);
-	KinectInterface() {};
+	KinectInterface(size_t w, size_t h, bool buffer, size_t device_id);
+	KinectInterface();
     ~KinectInterface();
 
-	virtual void capture_frame(cv::Mat &, cv::Mat &, cv::Mat &, bool);
+	virtual void capture_frame();
 	virtual void start_device(); //start the kinect device using LibFreenect2
     virtual void stop_device(); //stop the device
 	virtual void clear_frame_buffer(); //clear the frame buffer
-	virtual void process_frame_buffer(std::string filename); //process the frame buffer and save images
 	virtual void init_ar(const float marker_size, const string board_fn);
 	virtual size_t num_frames();
 
@@ -52,8 +50,6 @@ private:
 
 	Processor backend;
 
-
-
     SyncMultiFrameListener* listener;
     Registration* registration;
     Frame* undistorted;
@@ -62,6 +58,5 @@ private:
     Freenect2Device *dev;
     Freenect2 freenect2;
 
-	ARScene ar;
 };
 #endif //INTERACTION_FLOW_KINECT_INTERFACE_H
