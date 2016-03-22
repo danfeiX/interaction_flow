@@ -15,28 +15,20 @@
 #include <string>
 #include <fstream>
 #include "device_interface.h"
-#define BOUND_MIN_X -1
-#define BOUND_MIN_Y -1
-#define BOUND_MIN_Z 0
-#define BOUND_MAX_X 1
-#define BOUND_MAX_Y 0.75
-#define BOUND_MAX_Z 1.5
 
 
 using namespace libfreenect2;
 class KinectInterface : public DeviceInterface{
 public:
 	enum Processor { cl, gl, cpu };
-	KinectInterface(size_t w, size_t h, bool buffer, size_t device_id);
+	KinectInterface(size_t w, size_t h, size_t device_id);
 	KinectInterface();
     ~KinectInterface();
 
 	virtual void capture_frame();
 	virtual void start_device(); //start the kinect device using LibFreenect2
-    virtual void stop_device(); //stop the device
-	virtual void clear_frame_buffer(); //clear the frame buffer
+    virtual void stop_device(); 
 	virtual void init_ar(const float marker_size, const string board_fn);
-	virtual size_t num_frames();
 
 #if 0
 	void save_buffer(std::string filename);
@@ -45,8 +37,7 @@ public:
 
 
 private:
-	void register_depth(const Frame*, const Frame*, cv::Mat &, cv::Mat &); //process individual frame
-	void depth_to_xyz(const cv::Mat& rectified_depth, cv::Mat& outXYZ);
+	void register_depth(const Frame*, const Frame*, cv::Mat &, cv::Mat &); //register individual frames
 
 	Processor backend;
 

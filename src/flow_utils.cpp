@@ -1,5 +1,5 @@
 #include "flow_utils.h"
-using namespace std;
+
 //Abstract class of device interface
 void threshPosition(cv::Mat& depth, cv::Mat & xyz, const cv::Point3f min, const cv::Point3f max)
 {
@@ -19,6 +19,43 @@ void threshPosition(cv::Mat& depth, cv::Mat & xyz, const cv::Point3f min, const 
 		}
 	}
 }
+
+inline Point3f operator < (const Point3f& p1, const Point3f& p2)
+{
+	return p1.x < p2.x && p1.y < p2.y && p1.z < p2.z;
+}
+
+
+//input: 3-channel Mat of size M x N, each channel contain x, y, z coordinate, respectively
+//output: 1-channle Mat of size 3 x M*N, each row contain transformed x, y, z coordinate, respectively
+//transform_mat: RT matrix of size 4 x 4
+void transformPointCloud(cv::Mat & out_xyz, const cv::Mat & in_xyz, const cv::Mat & transform_mat)
+{
+	cv::Mat hg_pts; //homogeneous xyz points
+	cv::Mat xyz_chans[4];
+
+	//pad with 1's
+	cv::split(in_xyz, xyz_chans);
+	xyz_chans[3] = cv::Mat::ones(in_xyz.rows, in_xyz.cols, CV_32FC1);
+	cv::merge(xyz_chans, 4, hg_pts);
+	hg_pts = hg_pts.reshape(1, in_xyz.rows * in_xyz.cols);
+
+	//transform
+	out_xyz = transform_mat*hg_pts.t();
+	out_xyz.convertTo(out_xyz, CV_32FC1);
+}
+
+void rotateFlowCloud(cv::Mat & out_flow, const cv::Mat & in_flow, const cv::Mat & transform_mat)
+{
+	Mat flow_reshaped;
+	flow_reshaped = in_flow.reshape(1, in_flow.rows * in_flow.cols);
+
+	//transform
+	out_flow = transform_mat*flow_reshaped.t();
+	out_flow.convertTo(out_flow, CV_32FC1);
+}
+
+
 
 //! Write cv::Mat to binary
 /*!

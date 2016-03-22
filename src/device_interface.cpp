@@ -1,21 +1,19 @@
 #include "device_interface.h"
-#include "flow_utils.h"
-DeviceInterface::DeviceInterface(size_t w, size_t h, bool buffer, size_t device_id) :
+DeviceInterface::DeviceInterface(size_t w, size_t h, size_t device_id) :
 m_device_id(device_id),
-curr_rgb(nullptr),
-curr_xyz(nullptr),
-curr_depth(nullptr),
 im_width(w),
 im_height(h),
-do_buffer(buffer),
+do_buffer(false),
 m_thread(),
-thread_running(false)
+m_thread_running(false)
 {
 	m_cam_to_world = cv::Mat::eye(4, 4, CV_32FC1);
+	cx = cy = fx = fy = 0;
 }
 
+
 DeviceInterface::DeviceInterface():
-DeviceInterface(640, 480, false, 0)
+DeviceInterface(640, 480, 0)
 {
 }
 
@@ -24,64 +22,156 @@ DeviceInterface::~DeviceInterface()
 {
 }
 
-void DeviceInterface::update(cv::Mat & rgb, cv::Mat & depth, cv::Mat & xyz)
-{
-	if (!do_buffer) {
-		rgb_buffer.clear();
-		depth_buffer.clear();
-		xyz_buffer.clear();
-	}
-	rgb_buffer.push_back(rgb);
-	depth_buffer.push_back(depth);
-	xyz_buffer.push_back(xyz);
 
-	curr_rgb = &rgb_buffer.back();
-	curr_depth = &depth_buffer.back();
-	curr_xyz = &xyz_buffer.back();
+void DeviceInterface::start_all()
+{
+	start_device();
+	spawn_capture_thread();
+	init_ar(MARKER_SIZE, "D:/workspace/interaction_flow/ar/board.conf");
 }
 
-bool DeviceInterface::get_latest_frame(cv::Mat & rgb, cv::Mat & depth, cv::Mat & xyz)
+
+void DeviceInterface::stop_all()
 {
-	m_lock.lock();
-	bool success = true;
-	if (!curr_rgb || !curr_depth || !curr_xyz) {
-		success = false;
-	}
-	else {
-		curr_rgb->copyTo(rgb);
-		curr_depth->copyTo(depth);
-		curr_xyz->copyTo(xyz);
-	}
-	m_lock.unlock();
-	return success;
+	stop_capture_thread();
+	stop_device();
+	clear_frame_buffer();
 }
+
 
 void DeviceInterface::spawn_capture_thread()
 {
-	thread_running = true;
+	m_thread_running = true;
 	m_thread = std::thread(&DeviceInterface::capture_callback, this);
 }
 
-void DeviceInterface::stop_capture()
+
+void DeviceInterface::stop_capture_thread()
 {
-	thread_running = false;
+	m_thread_running = false;
 	if (m_thread.joinable()) m_thread.join();
 }
+
 
 void DeviceInterface::capture_callback()
 {
 	FPSTimer timer("CAPTURE_LOOP", 5);
-	while (thread_running) 
+	while (m_thread_running)
 	{
 		capture_frame();
 		timer.pulse();
 	}
 }
 
+
+void DeviceInterface::update(const cv::Mat & rgb, const cv::Mat & depth, const int timestamp)
+{
+	scope_guard sg(m_lock);
+
+	if (do_buffer) {
+		RGBDFrame new_frame(rgb, depth, timestamp);
+		new_frame.cx = cx;
+		new_frame.cy = cy;
+		new_frame.fx = fx;
+		new_frame.fy = fy;
+		rgbd_buffer.push_back(new_frame);
+		printf("buffered = %i\n", rgbd_buffer.size());
+	}
+	//update container of the latest frame
+	rgb.copyTo(curr_rgb);
+	depth.copyTo(curr_depth);
+}
+
+
+bool DeviceInterface::get_latest_frame(cv::Mat & rgb, cv::Mat & depth, cv::Mat & xyz)
+{
+	bool success = true;
+	lock_thread();
+	{
+		if (curr_rgb.dims == 0) {
+			success = false;
+		}
+		else {
+			curr_rgb.copyTo(rgb);
+			curr_depth.copyTo(depth);
+		}
+	}
+	unlock_thread();
+
+	if (success) {
+		depth_to_xyz(depth, xyz);
+	}
+
+	return success;
+}
+
+
+void DeviceInterface::save_raw_frames(const std::string filename)
+{
+	scope_guard sg(m_lock);
+	{
+		cout << "saving raw frames..." << endl;
+		ofstream output_file(filename.c_str(), ios::binary);
+		size_t num_frame = num_frames();
+		output_file.write((char *)&num_frame, sizeof(size_t));
+
+		for (int i = 0; i < num_frame; ++i) {
+			output_file.write((char*)(&rgbd_buffer[i]), sizeof(RGBDFrame));
+			writeMatBinary(output_file, rgbd_buffer[i].rgb);
+			writeMatBinary(output_file, rgbd_buffer[i].depth);
+
+			cv::imshow("rgb", rgbd_buffer[i].rgb);
+			cv::imshow("depth", rgbd_buffer[i].depth);
+
+			int key = cv::waitKey(1);
+		}
+	}
+}
+
+
+size_t DeviceInterface::num_frames()
+{
+	return rgbd_buffer.size();
+}
+
+
+void DeviceInterface::clear_frame_buffer()
+{
+	rgbd_buffer.clear();
+}
+
+
+void DeviceInterface::depth_to_xyz(const cv::Mat& rectified_depth, cv::Mat& outXYZ)
+{
+	const float bad_val = std::numeric_limits<float>::quiet_NaN();
+	const cv::Point3f bad_pos(bad_val, bad_val, bad_val);
+	outXYZ = cv::Mat(rectified_depth.rows, rectified_depth.cols, CV_32FC3);
+
+	for (int r = 0; r < rectified_depth.rows; ++r) {
+		for (int c = 0; c < rectified_depth.cols; ++c) {
+			float depth_val = rectified_depth.at<float>(r, c);
+			if (isnan(depth_val) || depth_val <= 0.001)
+			{
+				//depth value is not valid
+				outXYZ.at<cv::Point3f>(r, c) = bad_pos;
+			}
+			else {
+				float x = (c + 0.5 - cx) / fx * depth_val;
+				float y = (r + 0.5 - cy) / fy * depth_val;
+				float z = depth_val;
+				outXYZ.at<cv::Point3f>(r, c) = cv::Point3f(x, y, z);
+			}
+		}
+	}
+}
+
+
 void DeviceInterface::loadCalibrationFile(const std::string file_name)
 {
-
+	ifstream in(file_name, ios::binary);
+	readMatBinary(in, m_cam_to_world);
 }
+
 
 void DeviceInterface::calibrateCameraPose(const size_t num_frames)
 {
@@ -92,7 +182,7 @@ void DeviceInterface::calibrateCameraPose(const size_t num_frames)
 
 	while (frame_count < num_frames)
 	{
-		if (!thread_running) {
+		if (!m_thread_running) {
 			capture_frame();
 		}
 
@@ -133,7 +223,7 @@ void DeviceInterface::calibrateCameraPose(const size_t num_frames)
 
 	m_cam_to_world = Mat::zeros(4, 4, CV_32FC1);
 	m_cam_to_world.at<float>(3, 3) = 1;
-	R.copyTo(m_cam_to_world(Rect(0, 0, 3, 3))) ;
+	R.copyTo(m_cam_to_world(Rect(0, 0, 3, 3)));
 	tvec_mean.copyTo(m_cam_to_world(Rect(3, 0, 1, 3)));
 
 	float theta = M_PI / 2;
@@ -153,33 +243,13 @@ void DeviceInterface::calibrateCameraPose(const size_t num_frames)
 
 	Mat rotXM(4, 4, CV_32FC1, rotX);
 	Mat rotYM(4, 4, CV_32FC1, rotY);
-	m_cam_to_world = rotYM * rotXM * m_cam_to_world.inv();
+	m_cam_to_world = rotYM * rotXM * m_cam_to_world.inv(); //convert to OpenGL coordinate system
 
 	cout << "Calibration completed" << endl;
 	cout << "mean rvec: " << rvec_mean << endl;
 	cout << "mean tvec: " << tvec_mean << endl;
 	cout << "cam_to_world: " << m_cam_to_world << endl;
-}
 
-//1. Converts the rgb and depth frame buffer to cv::Mat that is of
-//the input format of PD-flow.
-//2. Writes the cv::Mat to a binary file
-void DeviceInterface::process_frame_buffer(const std::string filename) {
-	m_lock.lock();
-	cout << "processing buffer..." << endl;
-	ofstream output_file(filename.c_str(), ios::binary);
-	size_t num_frame = num_frames();
-	output_file.write((char *)&num_frame, sizeof(size_t));
-
-	for (int i = 0; i < num_frames(); ++i) {
-		Mat intensity;
-		writeMatBinary(output_file, rgb_buffer[i]);
-		writeMatBinary(output_file, depth_buffer[i]);
-		writeMatBinary(output_file, xyz_buffer[i]);
-
-		cv::imshow("depth2rgb", depth_buffer[i]);
-		cv::imshow("intensity", xyz_buffer[i]);
-		int key = cv::waitKey(1);
-	}
-	m_lock.unlock();
+	ofstream out("D:/workspace/interaction_flow/ar/camera_pose.mat", ios::binary);
+	writeMatBinary(out, m_cam_to_world);
 }

@@ -30,7 +30,6 @@ void ARScene::init_detector(const cv::Mat& cam_mat, const cv::Mat& distort_mat,
 		board_detector.set_repj_err_thres(1.5);
 	} catch (std::exception &ex) {
 		cv::waitKey(0);
-		cout << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << endl;
 		cout << "Exception :" << ex.what() << endl;
 	}
 }

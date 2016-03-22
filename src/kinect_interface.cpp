@@ -8,16 +8,18 @@
 #include "flow_utils.h"
 using namespace std;
 
-KinectInterface::KinectInterface(size_t w, size_t h, bool buffer, size_t device_id) :
+KinectInterface::KinectInterface(size_t w, size_t h, size_t device_id) :
 backend(Processor::cl),
-DeviceInterface(w, h, buffer, device_id)
+DeviceInterface(w, h, device_id)
 {
 }
+
 
 KinectInterface::KinectInterface():
 backend(Processor::cl)
 {
 }
+
 
 void KinectInterface::start_device() {
 
@@ -99,19 +101,21 @@ void KinectInterface::start_device() {
     dev->start();
     std::cout << "device serial: " << dev->getSerialNumber() << std::endl;
     std::cout << "device firmware: " << dev->getFirmwareVersion() << std::endl;
+
+
     registration = new libfreenect2::Registration(dev->getIrCameraParams(), dev->getColorCameraParams());
-	
+	cx = dev->getIrCameraParams().cx;
+	cy = dev->getIrCameraParams().cy;
+	fx = dev->getIrCameraParams().fx;
+	fy = dev->getIrCameraParams().fy;
 }
+
 
 void KinectInterface::stop_device() {
     dev->stop();
 }
 
-//capture the latest frame from Kinect
-//buffer: choice of:
-//1. buffer raw frames and post process the buffer later
-//2. buffer registered frames
-//3. nothing
+
 void KinectInterface::capture_frame() {
 	Mat xyz, rgb, depth;
     libfreenect2::FrameMap frame;
@@ -121,18 +125,12 @@ void KinectInterface::capture_frame() {
 
 	//buffer and real time registration
 	register_depth(rgb_frame, depth_frame, rgb, depth);
-	depth_to_xyz(depth, xyz);
-	//threshPosition(depth, xyz, cv::Point3f(BOUND_MIN_X, BOUND_MIN_Y, BOUND_MIN_Z), 
-	//						   cv::Point3f(BOUND_MAX_X, BOUND_MAX_Y, BOUND_MAX_Z));
-	m_lock.lock(); 
-		update(rgb, depth, xyz);
-	m_lock.unlock();
-
-	//ar.detect_board(intensity);
-
+	update(rgb, depth, 0);
 }
 
-KinectInterface::~KinectInterface() {
+
+KinectInterface::~KinectInterface() 
+{
     dev->close();
     if (registration)
         delete registration;
@@ -141,6 +139,7 @@ KinectInterface::~KinectInterface() {
     delete registered;
     delete depth2rgb;
 }
+
 
 void KinectInterface::init_ar(const float marker_size /*in meter*/, const string board_fn) {
 	libfreenect2::Freenect2Device::ColorCameraParams param = dev->getColorCameraParams();
@@ -168,47 +167,6 @@ void KinectInterface::register_depth(const Frame* rgb, const Frame* depth, cv::M
     cv::resize(depth2rgb_mat(cv::Rect(240, 0, 1440, 1080)), out_depth, cv::Size(im_width, im_height));
     out_depth = out_depth*0.001f; //mm - > m
 }
-
-
-void KinectInterface::depth_to_xyz(const cv::Mat& rectified_depth, cv::Mat& outXYZ) {
-	const float cx = dev->getIrCameraParams().cx;
-	const float cy = dev->getIrCameraParams().cy;
-	const float fx = 1/dev->getIrCameraParams().fx;
-	const float fy = 1/dev->getIrCameraParams().fy;
-
-	const float bad_val = std::numeric_limits<float>::quiet_NaN();
-	const cv::Point3f bad_pos(bad_val, bad_val, bad_val);
-	outXYZ = cv::Mat(rectified_depth.rows, rectified_depth.cols, CV_32FC3);
-
-	for (int r = 0; r < rectified_depth.rows; ++r) {
-		for (int c = 0; c < rectified_depth.cols; ++c) {
-			float depth_val = rectified_depth.at<float>(r, c);
-			if (isnan(depth_val) || depth_val <= 0.001)
-			{
-				//depth value is not valid
-				outXYZ.at<cv::Point3f>(r, c) = bad_pos;
-			}
-			else {
-				float x = (c + 0.5 - cx) * fx * depth_val;
-				float y = (r + 0.5 - cy) * fy * depth_val;
-				float z = depth_val;
-				outXYZ.at<cv::Point3f>(r, c) = cv::Point3f(x, y, z);
-			}
-		}
-	}
-}
-
-
-size_t KinectInterface::num_frames()
-{
-	assert(rgb_buffer.size() == depth_buffer.size() == xyz_buffer.size());
-	return rgb_buffer.size();
-}
-
-void KinectInterface::clear_frame_buffer() {
-}
-
-
 
 
 #if 0
